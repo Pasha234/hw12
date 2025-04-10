@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php">
+    <testsuites>
+        <testsuite name="tests">
+            <directory>./tests/</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <!-- <server name="KERNEL_CLASS" value="Pasha234\Hw11\Kernel" />
+        <server name="APP_ENV" value="test" force="true" />
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="REDIS_HOST" value="redis" force="true"/>
+        <env name="REDIS_PORT" value="6379" force="true"/>
+        <env name="REDIS_DB" value="15" force="true"/>
+        <env name="MONGO_DB" value="test_event_db" /> -->
+    </php>
+</phpunit>

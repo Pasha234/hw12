@@ -1,0 +1,51 @@
+services:
+    postgres:
+        image: postgres:17.4 
+        container_name: my_postgres
+        restart: always
+        ports:
+            - "5432:5432"
+        environment:
+            POSTGRES_USER: root
+            POSTGRES_PASSWORD: root
+            POSTGRES_DB: test
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./:/var/project
+        networks:
+            - app-network
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready", "-d", "db_prod"]
+            interval: 30s
+            timeout: 60s
+            retries: 5
+            start_period: 80s
+
+    nginx:
+        build:
+            context: ./nginx
+            dockerfile: Dockerfile
+        image: balance/nginx
+        ports:
+            - "80:80"
+        volumes:
+            - ./code:/data/mysite.local
+        networks:
+            - app-network
+    php:
+        build:
+            context: ./fpm
+            dockerfile: Dockerfile
+        working_dir: /data/mysite.local
+        image: balance/php
+        env_file: code/docker.env
+        volumes:
+            - ./code:/data/mysite.local
+        networks:
+            - app-network
+
+volumes:
+    postgres_data:
+
+networks:
+    app-network:
