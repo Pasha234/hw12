@@ -1,9 +1,12 @@
-В файле eav_movie_theater.drawio находится логическая модель данных
+Реализован паттерн Data Mapper и также Identity Map
 
 В папке sql находятся все sql скрипты:
-- DDL.sql - DDL скрипт для создания таблиц
-- indexes.sql - скрипт создания индексов
+- DDL.sql - DDL скрипт для создания таблицы пользователей
 - insert.sql - скрипт наполнения данными
-- view.sql - скрипт создания view таблиц
 
-docker-build.sh - запускает docker контейнер с postgres и импортирует дамп
+docker-build.sh - запускает docker контейнер с postgres и php
+
+Написаны тесты для тестирования основных операций с БД. Запустить можно командой:
+```bash
+docker-compose exec php composer test
+```
