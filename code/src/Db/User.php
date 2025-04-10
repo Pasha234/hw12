@@ -36,8 +36,26 @@ class User implements EntityInterface
         $this->values['email'] = $email;
     }
 
+    public function setId(int $id): void
+    {
+        $this->values['id'] = $id;
+    }
+
     public function setPassword(string $password)
     {
         $this->values['password'] = $password;
+    }
+
+    public function getFirstName(): ?string
+    {
+        return $this->values['first_name'] ?? null;
+    }
+     public function getLastName(): ?string
+    {
+        return $this->values['last_name'] ?? null;
+    }
+    public function getEmail(): ?string
+    {
+        return $this->values['email'] ?? null;
     }
 }

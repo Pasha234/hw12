@@ -1,5 +1,6 @@
 <?php
 
+use Pasha234\Hw12\Db\IdentityMap;
 use Pasha234\Hw12\Db\User;
 use Pasha234\Hw12\Db\UserMapper;
 use Pasha234\Hw12\Db\EntityCollection;
@@ -10,6 +11,7 @@ class UserMapperTest extends TestCase
 {
     private ?PDO $pdo;
     private UserMapper $userMapper;
+    private IdentityMap $identityMap;
 
     protected function setUp(): void
     {
@@ -40,7 +42,9 @@ class UserMapperTest extends TestCase
             )
         ");
 
-        $this->userMapper = new UserMapper($this->pdo);
+        $this->identityMap = new IdentityMap();
+
+        $this->userMapper = new UserMapper($this->pdo, $this->identityMap);
 
         // Clear table before each test
         $this->pdo->exec("DELETE FROM users");
@@ -180,5 +184,112 @@ class UserMapperTest extends TestCase
         $userData = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $this->assertFalse($userData);
+    }
+
+    /**
+     * @test
+     */
+    public function identity_map_returns_same_instance_for_same_id()
+    {
+        // Arrange: Вставляем пользователя напрямую или через маппер
+        $email = 'identity.test@example.com';
+        $userToInsert = new User([
+            'first_name' => 'Identity',
+            'last_name' => 'Test',
+            'email' => $email,
+            'password' => 'testpass',
+        ]);
+        $this->userMapper->save($userToInsert);
+        $userId = $userToInsert->getId();
+        $this->assertNotNull($userId);
+
+        // Act: Получаем пользователя дважды
+        echo "\nFetching user $userId for the first time...\n"; // Для отладки
+        $user1 = $this->userMapper->find($userId);
+
+        echo "Fetching user $userId for the second time...\n"; // Для отладки
+        $user2 = $this->userMapper->find($userId);
+
+        // Assert: Проверяем, что оба раза вернулся один и тот же объект
+        $this->assertInstanceOf(User::class, $user1);
+        $this->assertInstanceOf(User::class, $user2);
+        $this->assertSame(
+            $user1,
+            $user2,
+            "Finding the same user ID twice should return the exact same object instance from Identity Map."
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function identity_map_works_with_find_all()
+    {
+        // Arrange: Вставляем несколько пользователей
+        $user1Data = ['first_name' => 'FindAll', 'last_name' => 'Test1', 'email' => 'fa1@example.com', 'password' => 'pass'];
+        $user2Data = ['first_name' => 'FindAll', 'last_name' => 'Test2', 'email' => 'fa2@example.com', 'password' => 'pass'];
+        $user1 = new User($user1Data);
+        $user2 = new User($user2Data);
+        $this->userMapper->save($user1);
+        $this->userMapper->save($user2);
+        $user1Id = $user1->getId();
+        $user2Id = $user2->getId();
+        $this->identityMap = new IdentityMap();
+        $this->userMapper = new UserMapper($this->pdo, $this->identityMap);
+
+        // Act: Сначала получим одного пользователя через find()
+        $user1FromFind = $this->userMapper->find($user1Id);
+        $this->assertTrue($this->identityMap->has(User::class, $user1Id), "User 1 should be in map after find()");
+        $this->assertFalse($this->identityMap->has(User::class, $user2Id), "User 2 should NOT be in map yet");
+
+        // Теперь получим всех через findAll()
+        $allUsersCollection = $this->userMapper->findAll();
+        $this->assertTrue($this->identityMap->has(User::class, $user2Id), "User 2 should BE in map after findAll()");
+
+        // Assert: Найдем первого пользователя в коллекции и сравним экземпляры
+        $user1FromFindAll = null;
+        foreach ($allUsersCollection->toArray() as $user) { // Предполагаем, что у коллекции есть toArray()
+            if ($user->getId() === $user1Id) {
+                $user1FromFindAll = $user;
+                break;
+            }
+        }
+
+        $this->assertNotNull($user1FromFindAll, "User 1 should be found in the findAll collection");
+        $this->assertSame(
+            $user1FromFind,
+            $user1FromFindAll,
+            "User instance from find() should be the same instance found in findAll() if ID matches."
+        );
+    }
+
+     /**
+      * @test
+      */
+    public function saving_updates_instance_in_identity_map()
+    {
+        // Arrange
+        $userToInsert = new User([
+        'first_name' => 'Update',
+        'last_name' => 'MapTest',
+        'email' => 'updatemap@example.com',
+        'password' => 'initial',
+        ]);
+        $this->userMapper->save($userToInsert);
+        $userId = $userToInsert->getId();
+
+        // Act: Получаем, изменяем, сохраняем
+        /** @var User $user1 */
+        $user1 = $this->userMapper->find($userId);
+        $user1->setFirstName('UPDATED');
+        $this->userMapper->save($user1);
+
+        // Получаем снова (должен быть тот же объект из карты)
+        /** @var User $user2 */
+        $user2 = $this->userMapper->find($userId);
+
+        // Assert
+        $this->assertSame($user1, $user2, "Should return the same instance after saving.");
+        $this->assertEquals('UPDATED', $user2->getFirstName(), "The instance from the map should reflect the saved changes.");
     }
 }

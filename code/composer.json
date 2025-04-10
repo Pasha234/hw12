@@ -1,6 +1,6 @@
 {
     "name": "pasha234/hw12",
-    "type": "project",
+    "type": "library",
     "autoload": {
         "psr-4": {
             "Pasha234\\Hw12\\": "src/"

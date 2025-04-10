@@ -10,14 +10,15 @@ abstract class DataMapper
     protected PDO $pdo;
     protected PDOStatement $selectStatement;
     protected PDOStatement $insertStatement;
-    protected PDOStatement $updateStatement;
     protected PDOStatement $deleteStatement;
     protected array $fillable = [];
     protected string $entityClass;
+    protected IdentityMap $identityMap;
 
-    public function __construct(PDO $pdo)
+    public function __construct(PDO $pdo, IdentityMap $identityMap)
     {
         $this->pdo = $pdo;
+        $this->identityMap = $identityMap;
 
         $table = $this->getTable();
         $insertFillableFields = implode(", ", $this->fillable);
@@ -38,12 +39,23 @@ abstract class DataMapper
 
     public function find(int $id): ?EntityInterface
     {
+        $entity = $this->identityMap->get($this->entityClass, $id);
+        if ($entity !== null) {
+            return $entity;
+        }
+
         $this->selectStatement->setFetchMode(PDO::FETCH_ASSOC);
-        $this->selectStatement->execute([$id]);
-        
+        $this->selectStatement->execute(['id' => $id]);
+
         $result = $this->selectStatement->fetch();
 
-        return new $this->entityClass($result);
+        if ($result) {
+            $entity = new $this->entityClass($result);
+            $this->identityMap->set($this->entityClass, $id, $entity); // Добавляем в карту
+            return $entity;
+        }
+
+        return null;
     }
 
     public function findAll(): EntityCollection
@@ -53,39 +65,76 @@ abstract class DataMapper
         );
 
         $selectAllStatement->execute();
+        $results = $selectAllStatement->fetchAll(PDO::FETCH_ASSOC);
+        $entities = [];
 
-        $values = array_map(function(array $item) {
-            return new $this->entityClass($item);
-        }, $selectAllStatement->fetchAll(PDO::FETCH_ASSOC));
+        foreach ($results as $item) {
+            $id = $item['id'] ?? null;
+            if ($id === null) {
+                continue;
+            }
 
-        return new EntityCollection($values);
+            $entity = $this->identityMap->get($this->entityClass, $id);
+            if ($entity === null) {
+                $entity = new $this->entityClass($item);
+                $this->identityMap->set($this->entityClass, $id, $entity);
+            }
+            $entities[] = $entity;
+        }
+
+        return new EntityCollection($entities);
     }
 
     public function save(EntityInterface $entity): bool
     {
-        if ($entity->getId()) {
-            $values = $entity->toArray();
-            $updateStatement = $this->createUpdateStatement(array_keys($values));
-            $updateStatement->bindValue('id', $entity->getId());
-            foreach ($values as $key => $value) {
-                if (in_array($key, $this->fillable))
-                    $updateStatement->bindValue($key, $value);
+        $id = $entity->getId();
+        $values = $entity->toArray();
+        $result = false;
+
+        if ($id) {
+            unset($values['id']);
+            $updateKeys = array_intersect(array_keys($values), $this->fillable);
+            if (empty($updateKeys)) {
+                 return true;
             }
-            return $updateStatement->execute();
+
+            $updateStatement = $this->createUpdateStatement($updateKeys);
+            $updateStatement->bindValue('id', $id);
+            foreach ($updateKeys as $key) {
+                $updateStatement->bindValue($key, $values[$key]);
+            }
+
+            $result = $updateStatement->execute();
+            if ($result) {
+                $this->identityMap->set($this->entityClass, $id, $entity);
+            }
+
         } else {
-            $values = $entity->toArray();
-            foreach ($values as $key => $value) {
-                if (in_array($key, $this->fillable))
-                    $this->insertStatement->bindValue($key, $value);
+            $insertValues = array_intersect_key($values, array_flip($this->fillable));
+            foreach ($this->fillable as $key) {
+                $this->insertStatement->bindValue($key, $insertValues[$key] ?? null);
             }
-            return $this->insertStatement->execute();
+
+            $result = $this->insertStatement->execute();
+            if ($result) {
+                $lastId = (int)$this->pdo->lastInsertId($this->getTable() . '_id_seq');
+                $entity->setId($lastId);
+                $this->identityMap->set($this->entityClass, $lastId, $entity);
+            }
         }
+
+        return $result;
     }
 
     public function delete(EntityInterface $entity): bool
     {
-        if ($entity->getId()) {
-            return $this->deleteStatement->execute([$entity->getId()]);
+        $id = $entity->getId();
+        if ($id) {
+            $result = $this->deleteStatement->execute(['id' => $id]);
+            if ($result) {
+                $this->identityMap->remove($this->entityClass, $id);
+            }
+            return $result;
         }
         return false;
     }
