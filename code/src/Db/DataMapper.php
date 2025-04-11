@@ -85,6 +85,45 @@ abstract class DataMapper
         return new EntityCollection($entities);
     }
 
+    public function findWhere(array $where, ?int $limit = null): EntityCollection
+    {
+        $whereStatement = implode(" AND ", array_map(function($item, $key) {
+            $item = $this->pdo->quote($item);
+            return "$key = $item";
+        }, $where, array_keys($where)));
+
+        $query = "SELECT * FROM {$this->getTable()}
+            WHERE $whereStatement";
+
+        if ($limit !== null) {
+            $query .= " LIMIT $limit";
+        }
+
+        $selectWhereStatement = $this->pdo->prepare(
+            $query
+        );
+
+        $selectWhereStatement->execute();
+        $results = $selectWhereStatement->fetchAll(PDO::FETCH_ASSOC);
+        $entities = [];
+
+        foreach ($results as $item) {
+            $id = $item['id'] ?? null;
+            if ($id === null) {
+                continue;
+            }
+
+            $entity = $this->identityMap->get($this->entityClass, $id);
+            if ($entity === null) {
+                $entity = new $this->entityClass($item);
+                $this->identityMap->set($this->entityClass, $id, $entity);
+            }
+            $entities[] = $entity;
+        }
+
+        return new EntityCollection($entities);
+    }
+
     public function save(EntityInterface $entity): bool
     {
         $id = $entity->getId();

@@ -4,7 +4,6 @@ use Pasha234\Hw12\Db\IdentityMap;
 use Pasha234\Hw12\Db\User;
 use Pasha234\Hw12\Db\UserMapper;
 use Pasha234\Hw12\Db\EntityCollection;
-use PDO;
 use PHPUnit\Framework\TestCase;
 
 class UserMapperTest extends TestCase
@@ -131,6 +130,60 @@ class UserMapperTest extends TestCase
         $this->assertEquals('Jane', $secondUser->toArray()['first_name']);
     }
 
+    public function test_can_get_rows_by_where()
+    {
+        // Insert some users
+        $this->pdo->prepare("
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (?, ?, ?, ?)
+        ")->execute(['John', 'Doe', 'john.doe@example.com', 'password123']);
+
+        $this->pdo->prepare("
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (?, ?, ?, ?)
+        ")->execute(['Jane', 'Smith', 'jane.smith@example.com', 'another_password']);
+
+        $where = [
+            'first_name' => 'John',
+        ];
+
+        $users = $this->userMapper->findWhere($where);
+
+        $this->assertInstanceOf(EntityCollection::class, $users);
+        $this->assertCount(1, $users->toArray());
+
+        $firstUser = $users->get(0);
+        $this->assertInstanceOf(User::class, $firstUser);
+        $this->assertEquals('John', $firstUser->toArray()['first_name']);
+    }
+
+    public function test_can_get_rows_by_where_with_limit()
+    {
+        // Insert some users
+        $this->pdo->prepare("
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (?, ?, ?, ?)
+        ")->execute(['John', 'Doe', 'john.doe@example.com', 'password123']);
+
+        $this->pdo->prepare("
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (?, ?, ?, ?)
+        ")->execute(['John', 'Smith', 'john.smith@example.com', 'another_password']);
+
+        $where = [
+            'first_name' => 'John',
+        ];
+
+        $users = $this->userMapper->findWhere($where, 1);
+
+        $this->assertInstanceOf(EntityCollection::class, $users);
+        $this->assertCount(1, $users->toArray());
+
+        $firstUser = $users->get(0);
+        $this->assertInstanceOf(User::class, $firstUser);
+        $this->assertEquals('John', $firstUser->toArray()['first_name']);
+    }
+
     public function test_can_update()
     {
         // Insert a user first
@@ -203,11 +256,7 @@ class UserMapperTest extends TestCase
         $userId = $userToInsert->getId();
         $this->assertNotNull($userId);
 
-        // Act: Получаем пользователя дважды
-        echo "\nFetching user $userId for the first time...\n"; // Для отладки
         $user1 = $this->userMapper->find($userId);
-
-        echo "Fetching user $userId for the second time...\n"; // Для отладки
         $user2 = $this->userMapper->find($userId);
 
         // Assert: Проверяем, что оба раза вернулся один и тот же объект
